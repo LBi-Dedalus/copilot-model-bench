@@ -1,0 +1,62 @@
+tasks:
+  - id: write-hl7-parse
+    category: code_writing
+    prompt: |
+      Write PHP 7.4 compatible code defining `function parse_hl7(string $message): array`.
+      Input: an HL7 v2 message with segments separated by "\r" (also accept "\n" or "\r\n").
+      Output: an associative array keyed by segment name (e.g. "PID", "OBX"), each value a list of
+      segment occurrences; each occurrence is a list of fields (1-indexed as in HL7: for non-MSH
+      segments index 1 is the first field after the segment name; for MSH, index 1 is the field
+      separator itself and index 2 the encoding characters). Each field is a list of components
+      (split on "^"). Handle the escape sequences \F\ \S\ \R\ \E\ \T\ in component values
+      (field, component, repetition, escape, subcomponent separators). Ignore empty lines.
+      Return only one PHP code block, no explanation.
+    rubric:
+      - { id: code, description: "Correct, idiomatic and robust implementation", points: 1 }
+    code_test:
+      harness: |
+        <?php
+        require $argv[1];
+        $ok = 0; $n = 0;
+        function t($c) { global $ok, $n; $n++; if ($c) { $ok++; } }
+        $msg = "MSH|^~\\&|LIS|LAB|HIS|HOSP|202601011200||ORU^R01|123|P|2.5\rPID|1||12345^^^HOSP||DOE^JOHN\rOBX|1|NM|GLU^Glucose||5.4|mmol/L|3.9-6.1|N\rOBX|2|TX|NOTE||a\\F\\b\\S\\c";
+        $r = parse_hl7($msg);
+        t(isset($r['MSH'][0][1]) && $r['MSH'][0][1][0] === '|');
+        t(isset($r['MSH'][0][2]) && $r['MSH'][0][2][0] === '^~\\&');
+        t(isset($r['MSH'][0][9]) && $r['MSH'][0][9][0] === 'ORU' && $r['MSH'][0][9][1] === 'R01');
+        t($r['PID'][0][3][0] === '12345' && $r['PID'][0][3][3] === 'HOSP');
+        t($r['PID'][0][5][1] === 'JOHN');
+        t(count($r['OBX']) === 2);
+        t($r['OBX'][0][5][0] === '5.4');
+        t($r['OBX'][1][5][0] === 'a|b^c');
+        $r2 = parse_hl7("MSH|^~\\&|A\n\nPID|1\r\n");
+        t(isset($r2['PID'][0][1][0]) && $r2['PID'][0][1][0] === '1');
+        echo "PASSED $ok/$n\n";
+
+  - id: write-lab-flag
+    category: code_writing
+    prompt: |
+      Write PHP 7.4 compatible code defining
+      `function lab_flag(float $value, ?float $low, ?float $high, ?float $critLow, ?float $critHigh): string`
+      returning an HL7 table 0078 abnormal flag: "LL" if value < critLow, "HH" if value > critHigh,
+      "L" if value < low, "H" if value > high, otherwise "N". Null bounds are ignored. Critical
+      flags take precedence. Values equal to a bound are not abnormal. Return only one PHP code
+      block, no explanation.
+    rubric:
+      - { id: code, description: "Correct and clean implementation", points: 1 }
+    code_test:
+      harness: |
+        <?php
+        require $argv[1];
+        $ok = 0; $n = 0;
+        function t($c) { global $ok, $n; $n++; if ($c) { $ok++; } }
+        t(lab_flag(5.0, 3.9, 6.1, 2.5, 20.0) === 'N');
+        t(lab_flag(3.9, 3.9, 6.1, null, null) === 'N');
+        t(lab_flag(6.1, 3.9, 6.1, null, null) === 'N');
+        t(lab_flag(3.0, 3.9, 6.1, 2.5, 20.0) === 'L');
+        t(lab_flag(7.0, 3.9, 6.1, 2.5, 20.0) === 'H');
+        t(lab_flag(2.0, 3.9, 6.1, 2.5, 20.0) === 'LL');
+        t(lab_flag(25.0, 3.9, 6.1, 2.5, 20.0) === 'HH');
+        t(lab_flag(100.0, null, null, null, null) === 'N');
+        t(lab_flag(100.0, null, null, null, 50.0) === 'HH');
+        echo "PASSED $ok/$n\n";

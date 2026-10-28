@@ -1,0 +1,26 @@
+tasks:
+  - id: comprehension-inline-flow
+    category: comprehension
+    prompt: |
+      Explain, step by step, what happens when a request reaches `dispatch()` below with the URL
+      `/lab/result/validate?id=7` via GET and via POST. Cite line numbers. Say what is risky.
+    inline_context: |
+      1:  <?php
+      2:  class Router {
+      3:      private array $routes = ['/lab/result/validate' => ['ResultCtrl', 'validate', true]];
+      4:      public function dispatch(string $uri, string $method): void {
+      5:          $path = parse_url($uri, PHP_URL_PATH);
+      6:          [$class, $action, $csrf] = $this->routes[$path] ?? [null, null, false];
+      7:          if ($class === null) { http_response_code(404); return; }
+      8:          $ctrl = new $class();
+      9:          if ($csrf && $method === 'POST' && !Csrf::validate($_POST['token'] ?? '')) {
+      10:             http_response_code(403); return;
+      11:         }
+      12:         $ctrl->$action($_REQUEST);
+      13:     }
+      14: }
+    rubric:
+      - { id: lookup, description: "Path parsed on line 5 and route looked up on line 6, 404 on line 7 when missing", patterns: ['line.{0,5}[5-7]'] }
+      - { id: post-csrf, description: "On POST the CSRF token is validated (line 9) and 403 returned on failure", points: 2, patterns: ['POST.{0,200}(csrf|token).{0,100}403|403.{0,200}(csrf|token)'] }
+      - { id: get-bypass, description: "On GET the CSRF check is skipped entirely (condition requires POST) so the action still runs: CSRF bypass on a state-changing action", points: 4, patterns: ['GET.{0,300}(skip|bypass|not (checked|validated)|without)'] }
+      - { id: request, description: "Action receives $_REQUEST (mixes GET/POST/COOKIE), no authorization check shown", patterns: ['\$_REQUEST', 'authori[sz]ation|permission'] }
